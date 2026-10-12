@@ -1,3 +1,4 @@
+import { renderGuide } from "./guide";
 import { buildPackFiles } from "./packwiz";
 import { resolveMods } from "./resolve";
 import { renderStatus } from "./status";
@@ -13,6 +14,7 @@ const MAX_MODS = 2000;
  *   POST /api/rebuild      最後に届いた一覧でパックを作り直す（overrides.ts 変更後など。要トークン）
  *   GET  /pack.toml ほか   プレイヤーの packwiz-installer が読むファイル
  *   GET  /                 状況ページ
+ *   GET  /guide            プレイヤー向け設定手順
  */
 export default {
   async fetch(request, env): Promise<Response> {
@@ -38,6 +40,10 @@ export default {
         const pack = await env.PACK.get<BuiltPack>(KV_PACK, "json");
         if (url.pathname === "/") {
           return new Response(renderStatus(pack, url.origin), { headers: { "Content-Type": "text/html; charset=utf-8" } });
+        }
+        if (url.pathname === "/guide" || url.pathname === "/guide/") {
+          const html = renderGuide(pack, url.origin, env.MC_VERSION, env.NEOFORGE_VERSION);
+          return new Response(html, { headers: { "Content-Type": "text/html; charset=utf-8" } });
         }
         const content = pack?.files[url.pathname.slice(1)];
         if (content !== undefined) {

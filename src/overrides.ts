@@ -15,9 +15,9 @@ import type { Side } from "./types";
  * 書き換えたら `npm run deploy` のあと、/api/rebuild を呼ぶと反映される。
  */
 export const SIDE_OVERRIDES: Record<string, Side> = {
-  // 例:
-  // "smartbrainlib": "both",
-  // "file:mob_grinding_utils": "both",
+  // Modrinth では client=unsupported だが、プレイヤー側の Mod が前提にしている
+  "smartbrainlib": "both", // occultism が必要とする
+  "oh-the-trees-youll-grow": "both", // samurai_dynasty が必要とする
 };
 
 export function findOverride(slug: string | undefined, fileName: string): Side | undefined {

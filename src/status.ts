@@ -31,7 +31,8 @@ export function renderStatus(pack: BuiltPack | null, origin: string): string {
     })
     .join("");
 
-  return page(`<p>最終更新: ${esc(new Date(pack.builtAt).toLocaleString("ja-JP", { timeZone: "Asia/Tokyo" }))}（全 ${pack.mods.length} 個）</p>
+  return page(`<p>はじめての人は <a href="${esc(origin)}/guide">設定手順</a> を見てください。</p>
+<p>最終更新: ${esc(new Date(pack.builtAt).toLocaleString("ja-JP", { timeZone: "Asia/Tokyo" }))}（全 ${pack.mods.length} 個）</p>
 <p>Prism Launcher の起動前コマンドに指定するURL: <code>${esc(origin)}/pack.toml</code></p>
 ${sections}`);
 }

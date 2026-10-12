@@ -10,7 +10,7 @@
 
   // サーバーから届いたMod一覧と、生成したpackwizファイルの保存場所
   // id は初回デプロイ前に `npx wrangler kv namespace create PACK` で作って書き換える
-  "kv_namespaces": [{ "binding": "PACK", "id": "REPLACE_WITH_KV_NAMESPACE_ID" }],
+  "kv_namespaces": [{ "binding": "PACK", "id": "d2fb014f34404dd4a864c56a734cd0fa" }],
 
   // 秘密でない設定値。NeoForge を更新したら NEOFORGE_VERSION も書き換えてデプロイする
   "vars": {
