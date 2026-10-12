@@ -1,31 +1,31 @@
 import type { BuiltPack, ResolvedMod } from "./types";
 
-/** https://mc-mods.enderman-desu.org/ で表示する、ポートの一覧 */
-export function renderPortList(entries: { port: string; pack: BuiltPack | null }[], origin: string): string {
+/** https://mc-mods.enderman-desu.org/ で表示する、サーバーの一覧 */
+export function renderServerList(entries: { server: string; pack: BuiltPack | null }[], origin: string): string {
   const rows = entries
-    .map(({ port, pack }) => {
+    .map(({ server, pack }) => {
       const count = pack ? pack.mods.filter((m) => m.source !== "unresolved" && m.side !== "server").length : null;
       return `<tr>
-  <td><a href="${esc(origin)}/${esc(port)}/">${esc(port)}</a></td>
+  <td><a href="${esc(origin)}/${esc(server)}/">${esc(server)}</a></td>
   <td>${pack ? `${esc(jst(pack.builtAt))}（配布 ${count} 個）` : '<span class="sub">まだ一覧が届いていません</span>'}</td>
-  <td><a href="${esc(origin)}/${esc(port)}/guide">設定手順</a></td>
+  <td><a href="${esc(origin)}/${esc(server)}/guide">設定手順</a></td>
 </tr>`;
     })
     .join("");
   return page(
     "Mod同期状況",
-    `<p>サーバーのポートごとに、配る Mod の組み合わせ（パック）が分かれています。自分が入るサーバーのポートを選んでください。</p>
-<div class="scroll"><table><thead><tr><th>ポート</th><th>最終更新</th><th>手順</th></tr></thead>
+    `<p>サーバーごとに、配る Mod の組み合わせ（パック）が分かれています。自分が入るサーバーを選んでください。</p>
+<div class="scroll"><table><thead><tr><th>サーバー</th><th>最終更新</th><th>手順</th></tr></thead>
 <tbody>${rows}</tbody></table></div>`,
   );
 }
 
-/** https://mc-mods.enderman-desu.org/<port>/ で表示する、そのポートの状況ページ */
-export function renderStatus(pack: BuiltPack | null, port: string, origin: string): string {
-  const title = `Mod同期状況（ポート ${port}）`;
-  const back = `<p><a href="${esc(origin)}/">← ポートの一覧</a></p>`;
+/** https://mc-mods.enderman-desu.org/<server>/ で表示する、そのサーバーの状況ページ */
+export function renderStatus(pack: BuiltPack | null, server: string, origin: string): string {
+  const title = `Mod同期状況（${server}）`;
+  const back = `<p><a href="${esc(origin)}/">← サーバーの一覧</a></p>`;
   if (!pack) return page(title, `${back}<p>まだサーバーからMod一覧が届いていません。</p>`);
-  const base = `${origin}/${port}`;
+  const base = `${origin}/${server}`;
 
   const groups: [string, string, ResolvedMod[]][] = [
     ["unresolved", "特定できなかったMod（配布できません）", pack.mods.filter((m) => m.source === "unresolved")],

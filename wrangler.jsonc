@@ -13,9 +13,11 @@
   "kv_namespaces": [{ "binding": "PACK", "id": "d2fb014f34404dd4a864c56a734cd0fa" }],
 
   // 秘密でない設定値。NeoForge を更新したら NEOFORGE_VERSION も書き換えてデプロイする
-  // PORTS: パックを分けて持つサーバーのポート（カンマ区切り）。ここに無いポートの送信は断る
+  // SERVERS: パックを分けて持つサーバーの名前（カンマ区切り、英小文字・数字・-）。URL に使う。ここに無い名前の送信は断る
+  //   ポート番号は URL に出さない（Cloudflare の SRV レコードで隠しているため）
+  //   nightfall = mc-nightfall.enderman-desu.org / deepwell = mc-deepwell… / panopticon = mc-panopticon…
   "vars": {
-    "PORTS": "25564,25565,25566,25567",
+    "SERVERS": "nightfall,deepwell,panopticon",
     "PACK_NAME": "ModdedMC-Onsengai",
     "MC_VERSION": "1.21.1",
     "NEOFORGE_VERSION": "21.1.259"

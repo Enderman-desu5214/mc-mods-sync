@@ -4,9 +4,10 @@
 Run on the Ubuntu server host after the Minecraft container has started
 (the itzg image downloads the mods during startup):
 
-    python3 sync-mods.py --port 25564 /srv/minecraft/<server>/data/mods
+    python3 sync-mods.py --server nightfall /srv/minecraft/<server>/data/mods
 
---port is the port players connect to; each port has its own pack.
+--server is the server name used in the Worker URLs (SERVERS in wrangler.jsonc);
+each server has its own pack.
 
 For every jar it sends: file name, size, SHA-1, SHA-512 and the CurseForge
 fingerprint. The Worker matches them against Modrinth / CurseForge and
@@ -28,7 +29,7 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
-ENDPOINT = "https://mc-mods.enderman-desu.org/api/server/{port}/mods"
+ENDPOINT = "https://mc-mods.enderman-desu.org/api/server/{server}/mods"
 HERE = Path(__file__).resolve().parent
 TOKEN_FILE = HERE / "sync-mods.token"
 CACHE_FILE = HERE / "sync-mods.cache.json"
@@ -93,9 +94,9 @@ def collect(mods_dir: Path) -> list:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("mods_dir", type=Path, help="the server's mods folder")
-    parser.add_argument("--port", type=int, required=True, help="the port players connect to (selects the pack)")
+    parser.add_argument("--server", required=True, help="server name, e.g. nightfall (selects the pack)")
     parser.add_argument("--endpoint", default=ENDPOINT,
-                        help="upload URL, {port} is replaced (default: production Worker)")
+                        help="upload URL, {server} is replaced (default: production Worker)")
     parser.add_argument("--output", type=Path, help="write the request body to this file instead of uploading")
     args = parser.parse_args()
 
@@ -120,9 +121,9 @@ def main() -> int:
         print(f"[ERROR] mods-sync: {TOKEN_FILE} not found or empty", file=sys.stderr)
         return 1
 
-    print(f"[INFO] mods-sync: uploading {len(mods)} mods for port {args.port}...", flush=True)
+    print(f"[INFO] mods-sync: uploading {len(mods)} mods for {args.server}...", flush=True)
     request = urllib.request.Request(
-        args.endpoint.format(port=args.port),
+        args.endpoint.format(server=args.server),
         data=body,
         method="POST",
         headers={

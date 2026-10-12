@@ -1,33 +1,33 @@
 import { renderGuide } from "./guide";
 import { buildPackFiles } from "./packwiz";
 import { resolveMods } from "./resolve";
-import { renderPortList, renderStatus } from "./status";
+import { renderServerList, renderStatus } from "./status";
 import type { BuildSummary, BuiltPack, StoredUpload, UploadedMod } from "./types";
 
 const MAX_MODS = 2000;
 
-/** KV のキー。パックはサーバーのポートごとに別々に持つ */
-const kvUpload = (port: string) => `upload:${port}`;
-const kvPack = (port: string) => `pack:${port}`;
+/** KV のキー。パックはサーバーごとに別々に持つ */
+const kvUpload = (server: string) => `upload:${server}`;
+const kvPack = (server: string) => `pack:${server}`;
 
 /**
- * URL ごとの役割（<port> は wrangler.jsonc の PORTS にあるポート番号）:
- *   POST /api/server/<port>/mods     サーバーが Mod 一覧を送ってくる（要トークン）→ そのポートのパックを作り直す
- *   POST /api/server/<port>/rebuild  最後に届いた一覧でパックを作り直す（overrides.ts 変更後など。要トークン）
- *   GET  /<port>/pack.toml ほか      プレイヤーの packwiz-installer が読むファイル
- *   GET  /<port>/                    そのポートの状況ページ
- *   GET  /<port>/guide               そのポートのプレイヤー向け設定手順
- *   GET  /                           ポートの一覧
+ * URL ごとの役割（<server> は wrangler.jsonc の SERVERS にあるサーバー名。ポート番号は URL に出さない）:
+ *   POST /api/server/<server>/mods     サーバーが Mod 一覧を送ってくる（要トークン）→ そのサーバーのパックを作り直す
+ *   POST /api/server/<server>/rebuild  最後に届いた一覧でパックを作り直す（overrides.ts 変更後など。要トークン）
+ *   GET  /<server>/pack.toml ほか      プレイヤーの packwiz-installer が読むファイル
+ *   GET  /<server>/                    そのサーバーの状況ページ
+ *   GET  /<server>/guide               そのサーバーのプレイヤー向け設定手順
+ *   GET  /                           サーバーの一覧
  */
 export default {
   async fetch(request, env): Promise<Response> {
     const url = new URL(request.url);
-    const ports = env.PORTS.split(",").map((p) => p.trim());
+    const servers = env.SERVERS.split(",").map((s) => s.trim());
     try {
-      const api = url.pathname.match(/^\/api\/server\/(\d+)\/(mods|rebuild)$/);
+      const api = url.pathname.match(/^\/api\/server\/([a-z0-9-]+)\/(mods|rebuild)$/);
       if (request.method === "POST" && api) {
-        const [, port, action] = api;
-        if (!ports.includes(port)) return json({ error: "unknown port" }, 404);
+        const [, server, action] = api;
+        if (!servers.includes(server)) return json({ error: "unknown server" }, 404);
         if (!(await isAuthorized(request, env))) return json({ error: "unauthorized" }, 401);
 
         let upload: StoredUpload | null;
@@ -35,31 +35,31 @@ export default {
           const mods = parseUpload(await request.json());
           if (!mods) return json({ error: "invalid body" }, 400);
           upload = { receivedAt: new Date().toISOString(), mods };
-          await env.PACK.put(kvUpload(port), JSON.stringify(upload));
+          await env.PACK.put(kvUpload(server), JSON.stringify(upload));
         } else {
-          upload = await env.PACK.get<StoredUpload>(kvUpload(port), "json");
+          upload = await env.PACK.get<StoredUpload>(kvUpload(server), "json");
           if (!upload) return json({ error: "no upload yet" }, 404);
         }
-        return json(await rebuild(port, upload, env));
+        return json(await rebuild(server, upload, env));
       }
 
       if (request.method === "GET" || request.method === "HEAD") {
         if (url.pathname === "/") {
-          const packs = await Promise.all(ports.map((p) => env.PACK.get<BuiltPack>(kvPack(p), "json")));
-          return html(renderPortList(ports.map((port, i) => ({ port, pack: packs[i] })), url.origin));
+          const packs = await Promise.all(servers.map((p) => env.PACK.get<BuiltPack>(kvPack(p), "json")));
+          return html(renderServerList(servers.map((server, i) => ({ server, pack: packs[i] })), url.origin));
         }
 
-        const page = url.pathname.match(/^\/(\d+)(?:\/(.*))?$/);
-        if (page && ports.includes(page[1])) {
-          const [, port, rest = ""] = page;
-          const base = `${url.origin}/${port}`;
-          // "/25564" は "/25564/" に揃える（状況ページ内の相対的な案内がずれないように）
-          if (url.pathname === `/${port}`) return Response.redirect(`${base}/`, 301);
+        const page = url.pathname.match(/^\/([a-z0-9-]+)(?:\/(.*))?$/);
+        if (page && servers.includes(page[1])) {
+          const [, server, rest = ""] = page;
+          const base = `${url.origin}/${server}`;
+          // "/nightfall" は "/nightfall/" に揃える（状況ページ内の相対的な案内がずれないように）
+          if (url.pathname === `/${server}`) return Response.redirect(`${base}/`, 301);
 
-          const pack = await env.PACK.get<BuiltPack>(kvPack(port), "json");
-          if (rest === "") return html(renderStatus(pack, port, url.origin));
+          const pack = await env.PACK.get<BuiltPack>(kvPack(server), "json");
+          if (rest === "") return html(renderStatus(pack, server, url.origin));
           if (rest === "guide" || rest === "guide/") {
-            return html(renderGuide(pack, base, packName(env, port), env.MC_VERSION, env.NEOFORGE_VERSION));
+            return html(renderGuide(pack, base, packName(env, server), env.MC_VERSION, env.NEOFORGE_VERSION));
           }
           const content = pack?.files[rest];
           if (content !== undefined) {
@@ -76,22 +76,22 @@ export default {
   },
 } satisfies ExportedHandler<Env>;
 
-/** パックの名前。ポートごとに見分けがつくよう番号を付ける（例: ModdedMC-Onsengai-25564） */
-function packName(env: Env, port: string): string {
-  return `${env.PACK_NAME}-${port}`;
+/** パックの名前。サーバーごとに見分けがつくよう名前を付ける（例: ModdedMC-Onsengai-nightfall） */
+function packName(env: Env, server: string): string {
+  return `${env.PACK_NAME}-${server}`;
 }
 
-async function rebuild(port: string, upload: StoredUpload, env: Env): Promise<BuildSummary> {
+async function rebuild(server: string, upload: StoredUpload, env: Env): Promise<BuildSummary> {
   const mods = await resolveMods(upload.mods, env.CURSEFORGE_API_KEY, env.MC_VERSION);
   const builtAt = new Date().toISOString();
   const files = await buildPackFiles(mods, {
-    name: packName(env, port),
+    name: packName(env, server),
     version: builtAt,
     minecraft: env.MC_VERSION,
     neoforge: env.NEOFORGE_VERSION,
   });
   const pack: BuiltPack = { builtAt, mods, files };
-  await env.PACK.put(kvPack(port), JSON.stringify(pack));
+  await env.PACK.put(kvPack(server), JSON.stringify(pack));
 
   return {
     client: mods.filter((m) => m.source !== "unresolved" && m.side !== "server").length,

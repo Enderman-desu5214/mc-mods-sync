@@ -1,6 +1,6 @@
 import type { BuiltPack } from "./types";
 
-/** https://mc-mods.enderman-desu.org/<port>/guide で表示するプレイヤー向け設定手順。origin は <port> まで含めたURL */
+/** https://mc-mods.enderman-desu.org/<server>/guide で表示するプレイヤー向け設定手順。origin は <server> まで含めたURL */
 export function renderGuide(pack: BuiltPack | null, origin: string, packName: string, mc: string, neoforge: string): string {
   const count = pack ? pack.mods.filter((m) => m.source !== "unresolved" && m.side !== "server").length : null;
   const command = `"$INST_JAVA" -jar packwiz-installer-bootstrap.jar ${origin}/pack.toml`;
