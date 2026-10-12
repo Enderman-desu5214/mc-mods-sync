@@ -44,7 +44,6 @@ apply to every server.
 | `src/overrides.ts` | Manual side overrides |
 | `src/extras.ts` | Client-only mods to distribute in addition to the server's mods |
 | `server/sync-mods.py` | Script run on the server host after the server has started |
-| `server/sync-mods.ps1`, `server/start-server.bat` | Old Windows server version (no longer used) |
 
 ## Development
 

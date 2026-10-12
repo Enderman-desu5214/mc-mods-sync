@@ -1,4 +1,4 @@
-/** サーバーの sync-mods.ps1 が送ってくる、jar 1個分の情報 */
+/** サーバーの sync-mods.py が送ってくる、jar 1個分の情報 */
 export interface UploadedMod {
   name: string;
   size: number;
