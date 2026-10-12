@@ -1,53 +1,70 @@
 import { renderGuide } from "./guide";
 import { buildPackFiles } from "./packwiz";
 import { resolveMods } from "./resolve";
-import { renderStatus } from "./status";
+import { renderPortList, renderStatus } from "./status";
 import type { BuildSummary, BuiltPack, StoredUpload, UploadedMod } from "./types";
 
-const KV_UPLOAD = "upload";
-const KV_PACK = "pack";
 const MAX_MODS = 2000;
 
+/** KV のキー。パックはサーバーのポートごとに別々に持つ */
+const kvUpload = (port: string) => `upload:${port}`;
+const kvPack = (port: string) => `pack:${port}`;
+
 /**
- * URL ごとの役割:
- *   POST /api/server/mods  サーバーが Mod 一覧を送ってくる（要トークン）→ パックを作り直す
- *   POST /api/rebuild      最後に届いた一覧でパックを作り直す（overrides.ts 変更後など。要トークン）
- *   GET  /pack.toml ほか   プレイヤーの packwiz-installer が読むファイル
- *   GET  /                 状況ページ
- *   GET  /guide            プレイヤー向け設定手順
+ * URL ごとの役割（<port> は wrangler.jsonc の PORTS にあるポート番号）:
+ *   POST /api/server/<port>/mods     サーバーが Mod 一覧を送ってくる（要トークン）→ そのポートのパックを作り直す
+ *   POST /api/server/<port>/rebuild  最後に届いた一覧でパックを作り直す（overrides.ts 変更後など。要トークン）
+ *   GET  /<port>/pack.toml ほか      プレイヤーの packwiz-installer が読むファイル
+ *   GET  /<port>/                    そのポートの状況ページ
+ *   GET  /<port>/guide               そのポートのプレイヤー向け設定手順
+ *   GET  /                           ポートの一覧
  */
 export default {
   async fetch(request, env): Promise<Response> {
     const url = new URL(request.url);
+    const ports = env.PORTS.split(",").map((p) => p.trim());
     try {
-      if (request.method === "POST" && url.pathname === "/api/server/mods") {
+      const api = url.pathname.match(/^\/api\/server\/(\d+)\/(mods|rebuild)$/);
+      if (request.method === "POST" && api) {
+        const [, port, action] = api;
+        if (!ports.includes(port)) return json({ error: "unknown port" }, 404);
         if (!(await isAuthorized(request, env))) return json({ error: "unauthorized" }, 401);
-        const mods = parseUpload(await request.json());
-        if (!mods) return json({ error: "invalid body" }, 400);
-        const upload: StoredUpload = { receivedAt: new Date().toISOString(), mods };
-        await env.PACK.put(KV_UPLOAD, JSON.stringify(upload));
-        return json(await rebuild(upload, env));
-      }
 
-      if (request.method === "POST" && url.pathname === "/api/rebuild") {
-        if (!(await isAuthorized(request, env))) return json({ error: "unauthorized" }, 401);
-        const upload = await env.PACK.get<StoredUpload>(KV_UPLOAD, "json");
-        if (!upload) return json({ error: "no upload yet" }, 404);
-        return json(await rebuild(upload, env));
+        let upload: StoredUpload | null;
+        if (action === "mods") {
+          const mods = parseUpload(await request.json());
+          if (!mods) return json({ error: "invalid body" }, 400);
+          upload = { receivedAt: new Date().toISOString(), mods };
+          await env.PACK.put(kvUpload(port), JSON.stringify(upload));
+        } else {
+          upload = await env.PACK.get<StoredUpload>(kvUpload(port), "json");
+          if (!upload) return json({ error: "no upload yet" }, 404);
+        }
+        return json(await rebuild(port, upload, env));
       }
 
       if (request.method === "GET" || request.method === "HEAD") {
-        const pack = await env.PACK.get<BuiltPack>(KV_PACK, "json");
         if (url.pathname === "/") {
-          return new Response(renderStatus(pack, url.origin), { headers: { "Content-Type": "text/html; charset=utf-8" } });
+          const packs = await Promise.all(ports.map((p) => env.PACK.get<BuiltPack>(kvPack(p), "json")));
+          return html(renderPortList(ports.map((port, i) => ({ port, pack: packs[i] })), url.origin));
         }
-        if (url.pathname === "/guide" || url.pathname === "/guide/") {
-          const html = renderGuide(pack, url.origin, env.MC_VERSION, env.NEOFORGE_VERSION);
-          return new Response(html, { headers: { "Content-Type": "text/html; charset=utf-8" } });
-        }
-        const content = pack?.files[url.pathname.slice(1)];
-        if (content !== undefined) {
-          return new Response(content, { headers: { "Content-Type": "application/toml; charset=utf-8", "Cache-Control": "no-cache" } });
+
+        const page = url.pathname.match(/^\/(\d+)(?:\/(.*))?$/);
+        if (page && ports.includes(page[1])) {
+          const [, port, rest = ""] = page;
+          const base = `${url.origin}/${port}`;
+          // "/25564" は "/25564/" に揃える（状況ページ内の相対的な案内がずれないように）
+          if (url.pathname === `/${port}`) return Response.redirect(`${base}/`, 301);
+
+          const pack = await env.PACK.get<BuiltPack>(kvPack(port), "json");
+          if (rest === "") return html(renderStatus(pack, port, url.origin));
+          if (rest === "guide" || rest === "guide/") {
+            return html(renderGuide(pack, base, packName(env, port), env.MC_VERSION, env.NEOFORGE_VERSION));
+          }
+          const content = pack?.files[rest];
+          if (content !== undefined) {
+            return new Response(content, { headers: { "Content-Type": "application/toml; charset=utf-8", "Cache-Control": "no-cache" } });
+          }
         }
       }
 
@@ -59,17 +76,22 @@ export default {
   },
 } satisfies ExportedHandler<Env>;
 
-async function rebuild(upload: StoredUpload, env: Env): Promise<BuildSummary> {
-  const mods = await resolveMods(upload.mods, env.CURSEFORGE_API_KEY);
+/** パックの名前。ポートごとに見分けがつくよう番号を付ける（例: ModdedMC-Onsengai-25564） */
+function packName(env: Env, port: string): string {
+  return `${env.PACK_NAME}-${port}`;
+}
+
+async function rebuild(port: string, upload: StoredUpload, env: Env): Promise<BuildSummary> {
+  const mods = await resolveMods(upload.mods, env.CURSEFORGE_API_KEY, env.MC_VERSION);
   const builtAt = new Date().toISOString();
   const files = await buildPackFiles(mods, {
-    name: env.PACK_NAME,
+    name: packName(env, port),
     version: builtAt,
     minecraft: env.MC_VERSION,
     neoforge: env.NEOFORGE_VERSION,
   });
   const pack: BuiltPack = { builtAt, mods, files };
-  await env.PACK.put(KV_PACK, JSON.stringify(pack));
+  await env.PACK.put(kvPack(port), JSON.stringify(pack));
 
   return {
     client: mods.filter((m) => m.source !== "unresolved" && m.side !== "server").length,
@@ -105,6 +127,10 @@ function parseUpload(body: unknown): UploadedMod[] | null {
       m.fingerprint >= 0,
   );
   return ok ? mods.map(({ name, size, sha1, sha512, fingerprint }: UploadedMod) => ({ name, size, sha1, sha512, fingerprint })) : null;
+}
+
+function html(body: string): Response {
+  return new Response(body, { headers: { "Content-Type": "text/html; charset=utf-8" } });
 }
 
 function json(data: unknown, status = 200): Response {

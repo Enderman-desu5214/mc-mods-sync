@@ -22,7 +22,8 @@ export type Side = "both" | "client" | "server";
 
 export interface ResolvedMod {
   file: UploadedMod;
-  source: "modrinth" | "curseforge" | "unresolved";
+  /** local = どこにも公開していないが、overrides.ts でサーバー専用と指定した Mod */
+  source: "modrinth" | "curseforge" | "local" | "unresolved";
   title: string;
   slug?: string;
   side: Side;

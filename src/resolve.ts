@@ -1,3 +1,4 @@
+import { CLIENT_EXTRAS } from "./extras";
 import { findOverride } from "./overrides";
 import type { ResolvedMod, Side, UploadedMod } from "./types";
 
@@ -9,13 +10,18 @@ const USER_AGENT = "enderman-desu/mc-mods-sync (https://mc-mods.enderman-desu.or
 /**
  * サーバーのjar一覧を、Modrinth → CurseForge の順に照合して
  * 「何のModか」「プレイヤーに配る必要があるか」「どこから落とせるか」を決める。
+ * そのあと、プレイヤー専用 Mod（extras.ts）を Modrinth で探して加える。
  */
-export async function resolveMods(mods: UploadedMod[], curseforgeApiKey: string): Promise<ResolvedMod[]> {
+export async function resolveMods(
+  mods: UploadedMod[],
+  curseforgeApiKey: string,
+  minecraft: string,
+): Promise<ResolvedMod[]> {
   const fromModrinth = await resolveOnModrinth(mods);
   const rest = mods.filter((m) => !fromModrinth.has(m.sha512));
   const fromCurseforge = rest.length > 0 ? await resolveOnCurseforge(rest, curseforgeApiKey) : new Map();
 
-  return mods.map((file) => {
+  const serverMods = mods.map((file) => {
     const found = fromModrinth.get(file.sha512) ?? fromCurseforge.get(file.fingerprint);
     const resolved: ResolvedMod = found ?? {
       file,
@@ -28,9 +34,61 @@ export async function resolveMods(mods: UploadedMod[], curseforgeApiKey: string)
     if (override) {
       resolved.side = override;
       resolved.sideReason = "overrides.ts で指定";
+      // サーバー専用なら配らないので、どこにも見つからなくても問題にしない
+      if (override === "server" && resolved.source === "unresolved") resolved.source = "local";
     }
     return resolved;
   });
+
+  // サーバーにも同じ Mod が入っているなら、サーバーの版をそのまま使う
+  const onServer = new Set(serverMods.map((m) => m.slug).filter(Boolean));
+  const extras = await resolveClientExtras(CLIENT_EXTRAS.filter((slug) => !onServer.has(slug)), minecraft);
+  return [...serverMods, ...extras];
+}
+
+interface ModrinthProjectVersion {
+  id: string;
+  project_id: string;
+  version_type: "release" | "beta" | "alpha";
+  files: { url: string; filename: string; primary: boolean; size: number; hashes: { sha1: string; sha512: string } }[];
+}
+
+/** extras.ts の slug ごとに、MC_VERSION + NeoForge 用の最新版（正式版を優先）を探す */
+async function resolveClientExtras(slugs: string[], minecraft: string): Promise<ResolvedMod[]> {
+  const query = `loaders=${encodeURIComponent('["neoforge"]')}&game_versions=${encodeURIComponent(JSON.stringify([minecraft]))}`;
+  return Promise.all(
+    slugs.map(async (slug): Promise<ResolvedMod> => {
+      const versions = await fetchJson<ModrinthProjectVersion[]>(
+        `${MODRINTH_API}/project/${encodeURIComponent(slug)}/version?${query}`,
+        { headers: { "User-Agent": USER_AGENT } },
+      );
+      const version = versions.find((v) => v.version_type === "release") ?? versions[0];
+      const file = version && (version.files.find((f) => f.primary) ?? version.files[0]);
+      if (!version || !file) {
+        return {
+          file: { name: slug, size: 0, sha1: "", sha512: "", fingerprint: 0 },
+          source: "unresolved",
+          title: slug,
+          slug,
+          side: "client",
+          sideReason: `extras.ts で指定。Modrinth に ${minecraft} / NeoForge 用の版が無い`,
+        };
+      }
+      const project = await fetchJson<ModrinthProject>(`${MODRINTH_API}/project/${version.project_id}`, {
+        headers: { "User-Agent": USER_AGENT },
+      });
+      return {
+        file: { name: file.filename, size: file.size, sha1: file.hashes.sha1, sha512: file.hashes.sha512, fingerprint: 0 },
+        source: "modrinth",
+        title: project.title,
+        slug: project.slug,
+        side: "client",
+        sideReason: "extras.ts でプレイヤー専用に指定",
+        url: file.url,
+        modrinth: { projectId: project.id, versionId: version.id },
+      };
+    }),
+  );
 }
 
 interface ModrinthVersion {

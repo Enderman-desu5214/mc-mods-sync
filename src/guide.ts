@@ -1,7 +1,7 @@
 import type { BuiltPack } from "./types";
 
-/** https://mc-mods.enderman-desu.org/guide で表示するプレイヤー向け設定手順 */
-export function renderGuide(pack: BuiltPack | null, origin: string, mc: string, neoforge: string): string {
+/** https://mc-mods.enderman-desu.org/<port>/guide で表示するプレイヤー向け設定手順。origin は <port> まで含めたURL */
+export function renderGuide(pack: BuiltPack | null, origin: string, packName: string, mc: string, neoforge: string): string {
   const count = pack ? pack.mods.filter((m) => m.source !== "unresolved" && m.side !== "server").length : null;
   const command = `"$INST_JAVA" -jar packwiz-installer-bootstrap.jar ${origin}/pack.toml`;
 
@@ -19,7 +19,7 @@ li{margin:4px 0}.note{color:var(--sub)}.warn{color:var(--warn)}
 .scroll{overflow-x:auto}table{border-collapse:collapse;width:100%}th,td{border-bottom:1px solid var(--line);padding:6px 8px;text-align:left;vertical-align:top}
 button{background:var(--accent);border:0;border-radius:4px;color:var(--bg);cursor:pointer;font:inherit;margin-top:4px;padding:2px 10px}
 </style></head><body>
-<h1>ModdedMC-Onsengai Mod 自動同期の設定手順</h1>
+<h1>${esc(packName)} Mod 自動同期の設定手順</h1>
 
 <h2>このページでできること</h2>
 <p>一度だけ設定すれば、Prism Launcher でゲームを起動するたびに、サーバーと同じ Mod が自動でそろいます。サーバーで Mod が追加・更新・削除されると、次の起動時に自分の Mod も同じように入れ替わります。</p>
@@ -41,7 +41,7 @@ button{background:var(--accent);border:0;border-radius:4px;color:var(--bg);curso
 <li>Prism Launcher 左上の「インスタンスを追加」を押す</li>
 <li>「カスタム」を選び、バージョン一覧から <b>${esc(mc)}</b> を選ぶ</li>
 <li>右下の「Mod ローダー」で <b>NeoForge</b> を選び、バージョン <b>${esc(neoforge)}</b> を選ぶ</li>
-<li>名前を <code>ModdedMC-Onsengai</code> など分かりやすいものにして「OK」</li>
+<li>名前を <code>${esc(packName)}</code> など分かりやすいものにして「OK」</li>
 </ol>
 <p>この時点ではまだ起動しないでください。</p>
 
@@ -87,7 +87,7 @@ button{background:var(--accent);border:0;border-radius:4px;color:var(--bg);curso
 <tr><td>同期ウィンドウがエラーになる、起動前コマンドが失敗したと出る</td><td>ネットにつながっているか確かめ、もう一度起動。続くようならエラー画面の写真を管理者へ</td></tr>
 <tr><td>サーバー接続時に「Mod が足りない」「バージョンが違う」と弾かれる</td><td>一度ゲームを終了して起動し直す（最新に同期されます）。それでも弾かれるときは、画面に出た Mod 名を管理者へ</td></tr>
 <tr><td>CurseForge から手動でダウンロードするよう求められる</td><td>配布制限のある Mod です。画面の案内に従ってダウンロードし、指定の場所に置きます</td></tr>
-<tr><td>自分で追加した Mod（ミニマップなど）はどうなる？</td><td>同期で消されることはありません。ただし弾かれる原因になることがあるので、困ったら外して試してください</td></tr>
+<tr><td>自分で追加した Mod はどうなる？</td><td>同期で消されることはありません。ただし弾かれる原因になることがあるので、困ったら外して試してください。Sodium・Xaero's Minimap などは同期で配られるので、自分で入れていた人は自分の分を外してください（2 つ入ると起動しません）</td></tr>
 </tbody></table></div>
 </body></html>`;
 }

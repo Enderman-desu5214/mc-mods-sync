@@ -13,10 +13,12 @@
   "kv_namespaces": [{ "binding": "PACK", "id": "d2fb014f34404dd4a864c56a734cd0fa" }],
 
   // 秘密でない設定値。NeoForge を更新したら NEOFORGE_VERSION も書き換えてデプロイする
+  // PORTS: パックを分けて持つサーバーのポート（カンマ区切り）。ここに無いポートの送信は断る
   "vars": {
+    "PORTS": "25564,25565,25566,25567",
     "PACK_NAME": "ModdedMC-Onsengai",
     "MC_VERSION": "1.21.1",
-    "NEOFORGE_VERSION": "21.1.241"
+    "NEOFORGE_VERSION": "21.1.259"
   }
 
   // 秘密の値（コードや設定ファイルには書かない）:
